@@ -232,3 +232,109 @@ def test_named_type_cannot_be_redefined():
         parse_schema(schema)
 
     assert "redefined named type: ThatName" in str(exc)
+
+
+def test_schema_expansion():
+    """https://github.com/fastavro/fastavro/issues/314"""
+    sub_schema = {
+        "name": "Dependency",
+        "namespace": "com.namespace.dependencies",
+        "type": "record",
+        "fields": [
+            {"name": "sub_field_1", "type": "string"}
+        ]
+    }
+
+    outer_schema = {
+        "name": "MasterSchema",
+        "namespace": "com.namespace.master",
+        "type": "record",
+        "fields": [{
+            "name": "field_1",
+            "type": "com.namespace.dependencies.Dependency"
+        }]
+    }
+
+    combined = {
+        "name": "com.namespace.master.MasterSchema",
+        "type": "record",
+        "fields": [{"name": "field_1", "type": {
+                "name": "com.namespace.dependencies.Dependency",
+                "type": "record",
+                "fields": [
+                    {"name": "sub_field_1", "type": "string"}
+                ]
+            }
+        }]
+    }
+
+    parse_schema(sub_schema, _write_hint=False)
+    parsed = parse_schema(outer_schema, expand=True, _write_hint=False)
+
+    assert parsed == combined
+
+
+def test_schema_expansion_2():
+    """https://github.com/fastavro/fastavro/issues/314"""
+    original_schema = {
+        "name": "MasterSchema",
+        "namespace": "com.namespace.master",
+        "type": "record",
+        "fields": [{
+            "name": "field_1",
+            "type": {
+                "name": "Dependency",
+                "namespace": "com.namespace.dependencies",
+                "type": "record",
+                "fields": [
+                    {"name": "sub_field_1", "type": "string"}
+                ]
+            }
+        }, {
+            "name": "field_2",
+            "type": "com.namespace.dependencies.Dependency"
+        }]
+    }
+
+    expanded_schema = {
+        "name": "com.namespace.master.MasterSchema",
+        "type": "record",
+        "fields": [{
+            "name": "field_1",
+            "type": {
+                "name": "com.namespace.dependencies.Dependency",
+                "type": "record",
+                "fields": [
+                    {"name": "sub_field_1", "type": "string"}
+                ]
+            }
+        }, {
+            "name": "field_2",
+            "type": {
+                "name": "com.namespace.dependencies.Dependency",
+                "type": "record",
+                "fields": [
+                    {"name": "sub_field_1", "type": "string"}
+                ]
+            }
+        }]
+    }
+
+    assert expanded_schema == parse_schema(
+        original_schema, expand=True, _write_hint=False
+    )
+
+
+def test_expanding_recursive_schemas_should_stop():
+    """https://github.com/fastavro/fastavro/issues/314"""
+    sub_schema = {
+        "name": "LongList",
+        "type": "record",
+        "fields": [
+            {"name": "value", "type": "long"},
+            {"name": "next", "type": ["LongList", "null"]},
+        ]
+    }
+
+    parsed = parse_schema(sub_schema, expand=True, _write_hint=False)
+    assert sub_schema == parsed
