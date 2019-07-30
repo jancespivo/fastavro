@@ -138,38 +138,66 @@ def test_not_null_date():
 
 
 # test bytes decimal
-schema_bytes_decimal = {
-    "name": "n",
-    "namespace": "namespace",
-    "type": "bytes",
-    "logicalType": "decimal",
-    "precision": 15,
-    "scale": 3,
-}
+@pytest.fixture(name='scale')
+def fixture_scale():
+    return 3
 
 
-def test_bytes_decimal_negative():
-    data1 = Decimal("-2.90")
-    binary = serialize(schema_bytes_decimal, data1)
-    data2 = deserialize(schema_bytes_decimal, binary)
-    assert (data1 == data2)
+@pytest.fixture(name='schema_bytes_decimal')
+def fixture_schema_bytes_decimal(scale):
+    return {
+        "name": "n",
+        "namespace": "namespace",
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 15,
+        "scale": scale,
+    }
 
 
-def test_bytes_decimal_zero():
-    data1 = Decimal("0.0")
-    binary = serialize(schema_bytes_decimal, data1)
-    data2 = deserialize(schema_bytes_decimal, binary)
-    assert (data1 == data2)
+@pytest.mark.parametrize(
+    'input_data',
+    [
+        Decimal("2.90"),
+        Decimal("-2.90"),
+        Decimal("0.0"),
+        Decimal("-0.0"),
+        Decimal("123.456"),
+        Decimal("-123.456"),
+        Decimal("3245.234"),
+        Decimal("-3245.234"),
+        Decimal("0.456"),
+        Decimal("-0.456"),
+    ]
+)
+def test_bytes_decimal(schema_bytes_decimal, input_data):
+    binary = serialize(schema_bytes_decimal, input_data)
+    output_data = deserialize(schema_bytes_decimal, binary)
+    assert (input_data == output_data)
 
 
-def test_bytes_decimal_positive():
-    data1 = Decimal("123.456")
-    binary = serialize(schema_bytes_decimal, data1)
-    data2 = deserialize(schema_bytes_decimal, binary)
-    assert (data1 == data2)
+@pytest.mark.benchmark(
+    disable_gc=True,
+    warmup=True,
+)
+@pytest.mark.parametrize('scale', [3, 10, 20])
+def test_bytes_decimal_serialize_benchmark(schema_bytes_decimal, benchmark):
+    input_data = Decimal("-3245.234")
+    benchmark(serialize, schema_bytes_decimal, input_data)
 
 
-def test_bytes_decimal_scale():
+@pytest.mark.benchmark(
+    disable_gc=True,
+    warmup=True,
+)
+@pytest.mark.parametrize('scale', [3, 10, 20])
+def test_bytes_decimal_deserialize_benchmark(schema_bytes_decimal, benchmark):
+    input_data = Decimal("-3245.234")
+    binary = serialize(schema_bytes_decimal, input_data)
+    benchmark(deserialize, schema_bytes_decimal, binary)
+
+
+def test_bytes_decimal_scale(schema_bytes_decimal):
     data1 = Decimal("123.456678")  # does not fit scale
     with pytest.raises(ValueError):
         serialize(schema_bytes_decimal, data1)
